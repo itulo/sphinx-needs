@@ -3484,6 +3484,12 @@ Example:
 
 .. hint:: The created single json file per need, located in :ref:`needs_build_json_per_id_path` folder, e.g ``_build/needs_id/abc_432.json``
 
+   The file name is the need's id plus ``.json``. An id that is not a single file name
+   (it contains a slash or a backslash, or it would make the file land outside that
+   folder) is not written. The build warns (``needs.json_path``) and exports the other
+   needs. :ref:`needs_id_regex` does not prevent this: the default pattern matches only
+   the start of an id, and an imported or external need is not matched against it.
+
 .. _`needs_build_json_per_id_path`:
 
 needs_build_json_per_id_path

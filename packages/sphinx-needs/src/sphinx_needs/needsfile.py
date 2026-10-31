@@ -7,12 +7,15 @@ Creates, checks and imports ``needs.json`` files.
 from __future__ import annotations
 
 import json
+import ntpath
 import os
+import posixpath
 import sys
 from collections.abc import Iterable, Mapping
 from copy import deepcopy
 from datetime import datetime
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, NotRequired, TypedDict
 
 from jsonschema_rs import Draft7Validator, ValidationError
@@ -31,6 +34,48 @@ from sphinx_needs.needs_schema import (
 )
 
 log = get_logger(__name__)
+
+
+class NeedsOutputPathError(Exception):
+    """A JSON file that would not be a single file inside its output directory."""
+
+
+def _is_single_filename(file_name: str) -> bool:
+    """Whether ``file_name`` is one path segment on both POSIX and Windows.
+
+    ``os.path`` follows the platform the build runs on. A need id is data, written
+    on whichever platform the build uses, so a name has to be one segment on both:
+    a backslash path is a single file name on POSIX, and a slash path is one on
+    Windows only until ``os.path`` splits it. ``.`` and ``..`` are segments whose
+    own basename is themselves, and both leave the directory.
+    """
+    if not file_name or file_name in {".", ".."} or "\x00" in file_name:
+        return False
+    return (
+        posixpath.basename(file_name) == file_name
+        and ntpath.basename(file_name) == file_name
+    )
+
+
+def _checked_json_path(directory: str, file_name: str) -> str:
+    """``directory / file_name`` when that path is a file directly inside ``directory``.
+
+    :raises NeedsOutputPathError: If ``file_name`` is not a single path segment, or
+        joining it to ``directory`` leaves that directory. ``os.path.join`` discards
+        ``directory`` when ``file_name`` is absolute, and a ``..`` segment leaves it.
+        The resolved parent is checked as well, so a name that is one segment but
+        points at a symlink leaving ``directory`` is refused too.
+    """
+    if not _is_single_filename(file_name):
+        raise NeedsOutputPathError(
+            f"{file_name!r} is not a single file name inside the output directory"
+        )
+    root = Path(directory).resolve()
+    if (Path(directory) / file_name).resolve().parent != root:
+        raise NeedsOutputPathError(
+            f"{file_name!r} would be written outside the output directory"
+        )
+    return os.path.join(directory, file_name)
 
 
 class NeedsJsonCreatorType(TypedDict):
@@ -345,7 +390,11 @@ class NeedsList:
     def write_json(self, needs_file: str = "needs.json", needs_path: str = "") -> None:
         self._finalise()
         needs_dir = needs_path if needs_path else self.outdir
-        with open(os.path.join(needs_dir, needs_file), "w") as f:
+        # The per-id builder passes a need id plus ``.json`` as ``needs_file``.
+        # Imported and external needs skip ``needs_id_regex``, and the default
+        # pattern matches only a prefix, so that id may contain a path.
+        output = _checked_json_path(str(needs_dir), needs_file)
+        with open(output, "w") as f:
             json.dump(self.needs_list, f, sort_keys=True)
 
     def dump_json(self) -> str:

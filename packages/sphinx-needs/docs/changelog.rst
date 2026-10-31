@@ -296,6 +296,15 @@ Deprecations
 Bug fixes
 .........
 
+- 🐛 The :ref:`needs_id <needs_id_builder>` builder and :ref:`needs_build_json_per_id` no longer write a need's
+  JSON file outside their output directory when the id contains a path separator or ``..`` (:issue:`2190`)
+
+  The file name was the id plus ``.json``. ``os.path.join`` writes an absolute id at that path and follows ``..``
+  out of the directory. Imported and external needs are not checked against :ref:`needs_id_regex`, and the default
+  pattern matches only the start of an id, so such an id is accepted. The need is still loaded. Its per-id file is
+  skipped, with a ``needs.json_path`` warning (which fails a ``-W`` build until the id is changed or the warning is
+  suppressed), and the other needs are written as before.
+
 - 🐛 A :ref:`needs_external_needs` source whose ``target_url`` renders an absolute URL (``scheme://…`` or ``//…``)
   links to that URL, where ``base_url/`` was put in front of it (:issue:`2389`)
 

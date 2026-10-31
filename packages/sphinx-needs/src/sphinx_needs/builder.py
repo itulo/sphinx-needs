@@ -10,8 +10,8 @@ from sphinx.builders import Builder
 
 from sphinx_needs.config import NeedsSphinxConfig
 from sphinx_needs.data import SphinxNeedsData
-from sphinx_needs.logging import get_logger
-from sphinx_needs.needsfile import NeedsList
+from sphinx_needs.logging import get_logger, log_warning
+from sphinx_needs.needsfile import NeedsList, NeedsOutputPathError
 
 LOGGER = get_logger(__name__)
 
@@ -184,12 +184,21 @@ class NeedsIdBuilder(Builder):
             needs_list = NeedsList(self.env, self.outdir, self.srcdir, add_schema=False)
             needs_list.wipe_version(version)
             needs_list.add_need(version, need)
-            id = need["id"]
+            need_id = need["id"]
             try:
-                file_name = f"{id}.json"
-                needs_list.write_json(file_name, needs_dir)
+                needs_list.write_json(f"{need_id}.json", needs_dir)
+            except NeedsOutputPathError:
+                # The need stays in the build. Only its per-id file is skipped:
+                # one external id must not end the build, and must not choose a path.
+                log_warning(
+                    LOGGER,
+                    f"Need {need_id!r} is not exported to a per-id JSON file: "
+                    "its id is not a single file name inside the output directory",
+                    "json_path",
+                    (need["docname"], need["lineno"]) if need["docname"] else None,
+                )
             except Exception as e:
-                LOGGER.error(f"Needs-ID Builder {id} error: {e}")
+                LOGGER.error(f"Needs-ID Builder {need_id} error: {e}")
         LOGGER.info("Needs_id successfully exported")
 
 
